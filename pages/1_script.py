@@ -2,33 +2,94 @@ import streamlit as st
 from utils.session_state import get_state, update_state
 from core.script_generator import ScriptGenerator
 from utils.bible_parser import parse_bible_reference
+from utils.bible_data import BIBLE_DATA
 
 st.title("Step 1: 스크립트")
 state = get_state()
 
 # --- Input Section ---
-st.header("1. 성경 본문 입력")
-bible_input = st.text_input(
-    "묵상할 성경 구절을 입력하세요 (예: 시편 23편)", 
-    value=state.bible_passage
-)
+st.header("1. 성경 본문 선택")
 
-if st.button("대본 생성하기", type="primary"):
-    if not bible_input:
-        st.warning("성경 구절을 입력해주세요.")
-    else:
-        state.bible_passage = parse_bible_reference(bible_input)
-        update_state(state)
-        
-        generator = ScriptGenerator()
-        try:
-            with st.spinner("Claude가 대본을 작성하고 있습니다... (약 10-20초 소요)"):
-                script_data = generator.generate_script(state.bible_passage)
-                state.script = script_data
-                update_state(state)
-            st.success("대본 생성이 완료되었습니다! 아래에서 내용을 확인하고 수정하세요.")
-        except Exception as e:
-            st.error(f"오류 발생: {e}")
+def generate_script_action(passage):
+    """대본 생성 로직을 수행하는 함수"""
+    state.bible_passage = parse_bible_reference(passage)
+    update_state(state)
+    
+    generator = ScriptGenerator()
+    try:
+        with st.spinner(f"Claude가 '{passage}' 대본을 작성하고 있습니다... (약 10-20초 소요)"):
+            script_data = generator.generate_script(state.bible_passage)
+            state.script = script_data
+            update_state(state)
+        st.success("대본 생성이 완료되었습니다! 아래에서 내용을 확인하고 수정하세요.")
+    except Exception as e:
+        st.error(f"오류 발생: {e}")
+
+tab_ot, tab_nt, tab_direct = st.tabs(["구약 성경", "신약 성경", "직접 입력"])
+
+with tab_ot:
+    col_book, col_chapter = st.columns([1, 2])
+    with col_book:
+        ot_books = list(BIBLE_DATA["구약"].keys())
+        selected_book_ot = st.selectbox("구약 성경 선택", ot_books, key="sb_ot")
+    
+    with col_chapter:
+        if selected_book_ot:
+            chapter_count = BIBLE_DATA["구약"][selected_book_ot]
+            chapters = [str(i) for i in range(1, chapter_count + 1)]
+            
+            # UI 과밀 방지: 장 수가 20장을 넘으면 Selectbox, 아니면 Pills 사용
+            if chapter_count > 20:
+                selected_chapter_ot = st.selectbox(
+                    f"{selected_book_ot} 장 선택", 
+                    chapters, 
+                    index=None, 
+                    placeholder="장을 선택하세요",
+                    key="sb_ch_ot"
+                )
+            else:
+                selected_chapter_ot = st.pills(f"{selected_book_ot} 장 선택", chapters, selection_mode="single", key="pl_ot")
+            
+            if selected_chapter_ot:
+                passage_ot = f"{selected_book_ot} {selected_chapter_ot}장"
+                if st.button(f"📜 '{passage_ot}' 대본 만들기", key="btn_ot", type="primary"):
+                    generate_script_action(passage_ot)
+
+with tab_nt:
+    col_book, col_chapter = st.columns([1, 2])
+    with col_book:
+        nt_books = list(BIBLE_DATA["신약"].keys())
+        selected_book_nt = st.selectbox("신약 성경 선택", nt_books, key="sb_nt")
+    
+    with col_chapter:
+        if selected_book_nt:
+            chapter_count = BIBLE_DATA["신약"][selected_book_nt]
+            chapters = [str(i) for i in range(1, chapter_count + 1)]
+            
+            # UI 과밀 방지: 장 수가 20장을 넘으면 Selectbox, 아니면 Pills 사용
+            if chapter_count > 20:
+                selected_chapter_nt = st.selectbox(
+                    f"{selected_book_nt} 장 선택", 
+                    chapters, 
+                    index=None, 
+                    placeholder="장을 선택하세요",
+                    key="sb_ch_nt"
+                )
+            else:
+                selected_chapter_nt = st.pills(f"{selected_book_nt} 장 선택", chapters, selection_mode="single", key="pl_nt")
+            
+            if selected_chapter_nt:
+                passage_nt = f"{selected_book_nt} {selected_chapter_nt}장"
+                if st.button(f"📜 '{passage_nt}' 대본 만들기", key="btn_nt", type="primary"):
+                    generate_script_action(passage_nt)
+
+with tab_direct:
+    direct_input = st.text_input("성경 구절 직접 입력 (예: 시편 23편)", value=state.bible_passage)
+    if st.button("대본 생성하기", key="btn_direct", type="primary"):
+        if direct_input:
+            generate_script_action(direct_input)
+        else:
+            st.warning("성경 구절을 입력해주세요.")
 
 # --- Edit Section ---
 if state.script:
