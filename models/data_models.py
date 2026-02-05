@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class ScriptSection(BaseModel):
     section_type: str = Field(
-        ..., description="Opening, Reading, Explanation, Application, Prayer, Ending"
+        ..., description="Opening, Reading, Explanation(교훈), Application, Prayer, Ending"
     )
     content: str = Field(..., description="스크립트 텍스트 본문")
     bible_verse: Optional[str] = Field(

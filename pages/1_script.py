@@ -7,6 +7,41 @@ from utils.bible_data import BIBLE_DATA
 st.title("Step 1: 스크립트")
 state = get_state()
 
+if "script_confirmed" not in st.session_state:
+    st.session_state.script_confirmed = False
+if not state.script:
+    st.session_state.script_confirmed = False
+
+def build_full_script_text(sections):
+    parts = []
+    for section in sections:
+        parts.append(f"### {section.section_type}\n{section.content.strip()}")
+    return "\n\n".join(parts).strip() + "\n"
+
+def apply_full_script_text(text, sections):
+    lines = [line.rstrip() for line in text.splitlines()]
+    current_type = None
+    buffer = []
+    contents = {}
+
+    def flush():
+        nonlocal buffer, current_type
+        if current_type is not None:
+            contents[current_type] = "\n".join(buffer).strip()
+        buffer = []
+
+    for line in lines:
+        if line.startswith("### "):
+            flush()
+            current_type = line.replace("### ", "").strip()
+        else:
+            buffer.append(line)
+    flush()
+
+    for section in sections:
+        if section.section_type in contents and contents[section.section_type]:
+            section.content = contents[section.section_type]
+
 # --- Input Section ---
 st.header("1. 성경 본문 선택")
 
@@ -21,6 +56,7 @@ def generate_script_action(passage):
             script_data = generator.generate_script(state.bible_passage)
             state.script = script_data
             update_state(state)
+            st.session_state.script_confirmed = False
         st.success("대본 생성이 완료되었습니다! 아래에서 내용을 확인하고 수정하세요.")
     except Exception as e:
         st.error(f"오류 발생: {e}")
@@ -94,89 +130,97 @@ with tab_direct:
 # --- Edit Section ---
 if state.script:
     st.divider()
-    st.header("2. 대본 및 프롬프트 편집")
-    
-    # Art Style 설정
-    st.subheader("🎨 전체 이미지 스타일")
-    
-    STYLE_PRESETS = {
-        "수채화 (따뜻한 파스텔)": "warm, pastel-toned watercolor style, soft lighting, peaceful atmosphere, wet-on-wet technique",
-        "유화 (인상주의)": "textured oil painting, impressionist style, vibrant brushstrokes, van gogh style, thick paint",
-        "일러스트 (미니멀)": "clean lines, minimal colors, flat design illustration, modern look, vector art",
-        "실사 (시네마틱)": "photorealistic, cinematic lighting, 8k resolution, highly detailed, dramatic atmosphere, depth of field",
-        "애니메이션 (감성적인)": "anime style, makoto shinkai style, vibrant colors, detailed background, emotional atmosphere, lens flare",
-        "3D 렌더링 (귀여운)": "3d render, pixar style, cute, soft lighting, high quality, octane render, clay material",
-        "빈티지 (레트로 필름)": "vintage photo, film grain, retro aesthetic, 1980s style, nostalgic feel, faded colors",
-        "연필 스케치 (흑백)": "pencil sketch, charcoal drawing, black and white, detailed shading, rough texture, artistic",
-        "디지털 판타지 (몽환적)": "digital art, fantasy style, magical atmosphere, glowing effects, dreamy, ethereal",
-        "스테인드 글라스 (성스러운)": "stained glass art, vibrant colors, intricate patterns, light shining through, holy atmosphere, cathedral window",
-        "페이퍼 아트 (종이 공예)": "paper cutout art, layered paper, depth of field, soft shadows, craft style, handmade feel",
-        "직접 입력": "custom"
-    }
-    
-    # 현재 설정된 스타일이 프리셋에 있는지 확인하여 기본값 설정
-    current_preset = "직접 입력"
-    for name, prompt in STYLE_PRESETS.items():
-        if prompt == state.script.art_style:
-            current_preset = name
-            break
-            
-    selected_preset = st.selectbox("스타일 프리셋 선택", options=list(STYLE_PRESETS.keys()), index=list(STYLE_PRESETS.keys()).index(current_preset))
-    
-    if selected_preset == "직접 입력":
-        new_art_style = st.text_input("스타일 프롬프트 직접 입력", value=state.script.art_style)
-    else:
-        new_art_style = STYLE_PRESETS[selected_preset]
-        st.caption(f"적용된 프롬프트: {new_art_style}")
-        
-    if new_art_style != state.script.art_style:
-        state.script.art_style = new_art_style
-        update_state(state)
+    st.header("2. 대본 편집")
+    st.info("💡 팁: 숫자가 한글(이십칠장, 일절 등)로 되어 있는지 확인해주세요. 음성 생성 시 훨씬 자연스럽습니다.")
 
-    st.markdown("---")
+    full_script_default = build_full_script_text(state.script.sections)
+    full_script_text = st.text_area(
+        "대본 전체 편집",
+        value=st.session_state.get("full_script_text", full_script_default),
+        height=420,
+        help="섹션 구분은 '### 섹션명' 형태로 유지해주세요. 예: ### Opening",
+        key="full_script_editor"
+    )
+    st.session_state.full_script_text = full_script_text
 
-    # 섹션별 편집
-    for i, section in enumerate(state.script.sections):
-        with st.expander(f"Section {i+1}: {section.section_type}", expanded=True):
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                new_content = st.text_area(
-                    f"[{section.section_type}] 대본 내용",
-                    value=section.content,
-                    height=150,
-                    key=f"content_{i}"
-                )
-                if not new_content.strip():
-                    st.warning("⚠️ 대본 내용이 비어있습니다.")
-            
-            with col2:
+    if not full_script_text.strip():
+        st.warning("⚠️ 대본 내용이 비어있습니다.")
+
+    st.divider()
+
+    col_confirm, col_next = st.columns([1, 1])
+    with col_confirm:
+        if st.button("💾 대본 저장 및 확정"):
+            apply_full_script_text(st.session_state.full_script_text, state.script.sections)
+            update_state(state)
+            st.session_state.script_confirmed = True
+            st.toast("대본이 저장되었습니다.", icon="✅")
+
+    if st.session_state.script_confirmed:
+        st.header("3. 이미지 스타일 설정")
+
+        STYLE_PRESETS = {
+            "수채화 (따뜻한 파스텔)": "warm, pastel-toned watercolor style, soft lighting, peaceful atmosphere, wet-on-wet technique",
+            "유화 (인상주의)": "textured oil painting, impressionist style, vibrant brushstrokes, van gogh style, thick paint",
+            "일러스트 (미니멀)": "clean lines, minimal colors, flat design illustration, modern look, vector art",
+            "실사 (시네마틱)": "photorealistic, cinematic lighting, 8k resolution, highly detailed, dramatic atmosphere, depth of field",
+            "애니메이션 (감성적인)": "anime style, makoto shinkai style, vibrant colors, detailed background, emotional atmosphere, lens flare",
+            "3D 렌더링 (귀여운)": "3d render, pixar style, cute, soft lighting, high quality, octane render, clay material",
+            "빈티지 (레트로 필름)": "vintage photo, film grain, retro aesthetic, 1980s style, nostalgic feel, faded colors",
+            "연필 스케치 (흑백)": "pencil sketch, charcoal drawing, black and white, detailed shading, rough texture, artistic",
+            "디지털 판타지 (몽환적)": "digital art, fantasy style, magical atmosphere, glowing effects, dreamy, ethereal",
+            "스테인드 글라스 (성스러운)": "stained glass art, vibrant colors, intricate patterns, light shining through, holy atmosphere, cathedral window",
+            "페이퍼 아트 (종이 공예)": "paper cutout art, layered paper, depth of field, soft shadows, craft style, handmade feel",
+            "직접 입력": "custom"
+        }
+
+        # 현재 설정된 스타일이 프리셋에 있는지 확인하여 기본값 설정
+        current_preset = "직접 입력"
+        for name, prompt in STYLE_PRESETS.items():
+            if prompt == state.script.art_style:
+                current_preset = name
+                break
+
+        selected_preset = st.selectbox("스타일 프리셋 선택", options=list(STYLE_PRESETS.keys()), index=list(STYLE_PRESETS.keys()).index(current_preset))
+
+        if selected_preset == "직접 입력":
+            new_art_style = st.text_input("스타일 프롬프트 직접 입력", value=state.script.art_style)
+        else:
+            new_art_style = STYLE_PRESETS[selected_preset]
+            st.caption(f"적용된 프롬프트: {new_art_style}")
+
+        if new_art_style != state.script.art_style:
+            state.script.art_style = new_art_style
+            update_state(state)
+
+        st.markdown("---")
+
+        st.subheader("파트별 이미지 프롬프트")
+        for i, section in enumerate(state.script.sections):
+            with st.expander(f"Section {i+1}: {section.section_type}", expanded=False):
                 new_prompt_kr = st.text_area(
                     "이미지 설명 (한글 - 참고용)",
                     value=section.image_prompt_korean,
-                    height=70,
+                    height=80,
                     key=f"prompt_kr_{i}"
                 )
                 new_prompt_en = st.text_area(
                     "이미지 프롬프트 (English - Gemini용)",
                     value=section.image_prompt_english,
-                    height=70,
+                    height=80,
                     key=f"prompt_en_{i}"
                 )
-            
-            # 변경 사항 실시간 반영 (Streamlit 특성상 rerun 시 반영되므로 session state 직접 수정)
-            section.content = new_content
-            section.image_prompt_korean = new_prompt_kr
-            section.image_prompt_english = new_prompt_en
+                section.image_prompt_korean = new_prompt_kr
+                section.image_prompt_english = new_prompt_en
 
-    st.divider()
-    
-    col_confirm, col_next = st.columns([1, 1])
-    with col_confirm:
-        if st.button("💾 대본 저장 및 확정"):
-            update_state(state)
-            st.toast("대본이 저장되었습니다.", icon="✅")
-            
-    with col_next:
-        if st.button("다음 단계 (음성 생성) 👉"):
-            st.switch_page("pages/2_voice.py")
+        col_save, col_next = st.columns([1, 1])
+        with col_save:
+            if st.button("💾 대본 및 스타일 저장", type="primary"):
+                update_state(state)
+                st.toast("대본과 스타일이 저장되었습니다!", icon="✅")
+
+        with col_next:
+            if st.button("다음 단계 (음성 생성) 👉"):
+                st.switch_page("pages/2_voice.py")
+    else:
+        st.info("대본을 확정하면 이미지 스타일 설정이 나타납니다.")
