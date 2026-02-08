@@ -16,3 +16,15 @@ def get_state() -> ProjectState:
 
 def update_state(new_state: ProjectState) -> None:
     st.session_state.project_state = new_state
+
+
+def reset_session_state() -> None:
+    st.session_state.project_state = ProjectState()
+    for key in [
+        "script_confirmed",
+        "full_script_text",
+        "voice_list",
+        "images_confirmed",
+    ]:
+        if key in st.session_state:
+            del st.session_state[key]

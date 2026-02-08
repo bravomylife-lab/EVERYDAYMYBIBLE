@@ -13,11 +13,11 @@ def build_zip_package(
     script: ScriptData,
     final_audio_bytes: Optional[bytes],
     srt_content: str,
-    image_paths: List[str],
     timestamps: Optional[List[TimestampedSection]] = None,
 ) -> bytes:
     """
     모든 생성물을 하나의 ZIP 파일로 압축하여 바이트로 반환합니다.
+    이미지는 ScriptData의 image_prompts에서 가져옵니다.
     """
     folder_name = _safe_folder_name(bible_reference)
     date_str = datetime.now().strftime("%Y%m%d")
@@ -31,14 +31,16 @@ def build_zip_package(
         zf.writestr(f"{root}/Script.srt", srt_content.encode("utf-8"))
         zf.writestr(f"{root}/Script.txt", _build_script_text(script).encode("utf-8"))
 
-        for idx, section in enumerate(script.sections):
-            img_path = image_paths[idx] if idx < len(image_paths) else ""
-            if not img_path or not os.path.exists(img_path):
-                continue
-            ts = timestamps[idx] if timestamps and idx < len(timestamps) else None
-            filename = _build_image_filename(idx + 1, section.section_type, ts)
-            with open(img_path, "rb") as f:
-                zf.writestr(f"{root}/Images/{filename}", f.read())
+        # 다중 이미지 프롬프트에서 이미지 경로 추출
+        global_idx = 0
+        for section_idx, section in enumerate(script.sections):
+            ts = timestamps[section_idx] if timestamps and section_idx < len(timestamps) else None
+            for j, ip in enumerate(section.image_prompts):
+                if ip.image_path and os.path.exists(ip.image_path):
+                    filename = _build_image_filename(global_idx + 1, section.section_type, j, ts)
+                    with open(ip.image_path, "rb") as f:
+                        zf.writestr(f"{root}/Images/{filename}", f.read())
+                global_idx += 1
 
     zip_buffer.seek(0)
     return zip_buffer.getvalue()
@@ -52,7 +54,7 @@ def _build_script_text(script: ScriptData) -> str:
 
 
 def _build_image_filename(
-    index: int, section_type: str, ts: Optional[TimestampedSection]
+    index: int, section_type: str, sub_index: int, ts: Optional[TimestampedSection]
 ) -> str:
     minutes = 0
     seconds = 0

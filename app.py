@@ -1,6 +1,6 @@
 import streamlit as st
 
-from utils.session_state import init_session_state
+from utils.session_state import init_session_state, reset_session_state
 
 st.set_page_config(
     page_title="EverydayBible",
@@ -10,10 +10,16 @@ st.set_page_config(
 
 init_session_state()
 
+with st.sidebar:
+    if st.button("🔄 처음부터 다시 시작", use_container_width=True):
+        reset_session_state()
+        st.toast("프로젝트가 초기화되었습니다.", icon="✅")
+        st.rerun()
+
 pages = [
     st.Page("pages/1_script.py", title="1. 스크립트", icon="📝"),
-    st.Page("pages/2_voice.py", title="2. 음성", icon="🎙️"),
-    st.Page("pages/3_visual.py", title="3. 비주얼", icon="🖼️"),
+    st.Page("pages/2_image.py", title="2. 이미지", icon="🖼️"),
+    st.Page("pages/3_voice.py", title="3. 음성", icon="🎙️"),
     st.Page("pages/4_export.py", title="4. 내보내기", icon="📦"),
     st.Page("pages/5_youtube.py", title="5. 유튜브", icon="▶️"),
 ]
